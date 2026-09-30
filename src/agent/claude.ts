@@ -28,6 +28,7 @@ export async function callClaude(
   system: string,
   messages: ClaudeMessage[],
   tools: ToolDefinition[],
+  opts: { toolChoice?: 'auto' | 'any' } = {},
   apiUrl = 'https://api.anthropic.com/v1/messages',
 ): Promise<ClaudeResponse> {
   let lastError: unknown;
@@ -40,7 +41,10 @@ export async function callClaude(
           'x-api-key': config.ANTHROPIC_API_KEY,
           'anthropic-version': '2023-06-01',
         },
-        body: JSON.stringify({ model: config.CLAUDE_MODEL, max_tokens: 1024, system, messages, tools }),
+        body: JSON.stringify({
+          model: config.CLAUDE_MODEL, max_tokens: 1024, system, messages, tools,
+          tool_choice: { type: opts.toolChoice ?? 'auto' },
+        }),
         signal: AbortSignal.timeout(60_000),
       });
       if (res.ok) return (await res.json()) as ClaudeResponse;

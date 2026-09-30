@@ -81,6 +81,8 @@ export const toolUse = (name: string, input: Record<string, unknown>) => () => (
   content: [{ type: 'tool_use', id: `tu_${++seq}`, name, input }],
 });
 export const say = (text: string) => () => ({ stop_reason: 'end_turn', content: [{ type: 'text', text }] });
+/** O modelo respondendo pela ferramenta "responder" (o único jeito de só conversar na 1ª etapa). */
+export const respond = (mensagem: string) => toolUse('responder', { mensagem });
 
 const realFetch = globalThis.fetch;
 before(() => {
@@ -92,7 +94,12 @@ before(() => {
       claudeRequests.push(body);
       const next = state.claudeQueue.shift();
       if (!next) throw new Error('Claude chamado mais vezes que o roteiro');
-      return json(next(body));
+      const out = next(body);
+      // Igual à API real: com tool_choice "any" a resposta TEM que chamar uma ferramenta
+      if (body.tool_choice?.type === 'any' && !out.content.some((b: any) => b.type === 'tool_use')) {
+        throw new Error('Roteiro inválido: com tool_choice "any" a API sempre devolve uma ferramenta');
+      }
+      return json(out);
     }
     if (u.includes('api.openai.com')) {
       assert.ok(init.body instanceof FormData);

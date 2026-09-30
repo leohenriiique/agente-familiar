@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import { beforeEach, mock, test } from 'node:test';
-import { claudeRequests, fakeDb, say, sent, state, tables, toolUse, uploads, type ClaudeScript } from './harness.js';
+import { claudeRequests, fakeDb, respond, say, sent, state, tables, toolUse, uploads, type ClaudeScript } from './harness.js';
 
 // ---------------------------------------------------------------- app sob teste
 Object.assign(process.env, {
@@ -84,7 +84,7 @@ test('texto: registra gasto com data relativa e confirma com categoria, data e v
 });
 
 test('texto: sem gasto só conversa (sem ferramenta) e a resposta do modelo é enviada', async () => {
-  state.claudeQueue = [say('Quanto foi a gasolina?')];
+  state.claudeQueue = [respond('Quanto foi a gasolina?')];
   await handleIncoming(webhook({ conversation: 'abasteci o carro' }));
   assert.equal(expenses().length, 0);
   assert.equal(lastSent(), 'Quanto foi a gasolina?');
@@ -215,7 +215,7 @@ test('gasto de outro membro/família não pode ser alterado por id', async () =>
     amount_cents: 999, description: 'alheio', merchant: null, spent_at: '2026-09-01T12:00:00Z', payment_method: null,
     status: 'confirmado', created_at: '2026-09-01',
   }];
-  state.claudeQueue = [toolUse('corrigir_gasto', { gasto_id: '11111111-1111-4111-8111-111111111111', valor: 1 }), say('Não encontrei esse gasto.')];
+  state.claudeQueue = [toolUse('corrigir_gasto', { gasto_id: '11111111-1111-4111-8111-111111111111', valor: 1 }), respond('Não encontrei esse gasto.')];
   await handleIncoming(webhook({ conversation: 'muda o gasto 1111 para 1 real' }));
   assert.equal(tables.expenses[0]!.amount_cents, 999);
 });
@@ -366,4 +366,62 @@ test('print real: áudio "tira a dipirona" já comprada — sem transcrição du
 
   // os itens em aberto foram como dica para a transcrição
   assert.match(state.lastTranscribePrompt, /Lista de compras: shampoo/);
+});
+
+// ---------------------------------------------------------------- print de 02:15: confirmações inventadas
+
+test('toda 1ª chamada obriga uma ferramenta e oferece "responder"', async () => {
+  state.claudeQueue = [respond('Oi! Em que posso ajudar?')];
+  await handleIncoming(webhook({ conversation: 'tudo bem?' }));
+  assert.equal(claudeRequests[0].tool_choice.type, 'any');
+  assert.ok(claudeRequests[0].tools.some((t: any) => t.name === 'responder'));
+  assert.equal(lastSent(), 'Oi! Em que posso ajudar?');
+  assert.equal(claudeRequests.length, 1); // responder encerra: sem chamada extra
+});
+
+test('print real: "ADICIONA NA LISTA toddy, leite, propanalol, coca" grava de verdade', async () => {
+  state.claudeQueue = [
+    toolUse('adicionar_compras', { itens: [
+      { item: 'toddy', local: 'supermercado', secao: 'mercearia' },
+      { item: 'leite', local: 'supermercado', secao: 'frios e laticínios' },
+      { item: 'propranolol', local: 'farmácia' },
+      { item: 'coca cola', local: 'supermercado', secao: 'bebidas' },
+    ] }),
+    say('OK'),
+  ];
+  await handleIncoming(webhook({ conversation: 'ADICIONA NA LISTA DE COMPRAS \nTODDY\nLEITE\nPROPANALOL\nCOCA COLA' }));
+  assert.equal(tables.shopping_items!.length, 4);
+  assert.match(lastSent(), /📝 \*Anotado na lista\*/);
+  assert.match(lastSent(), /💊 Farmácia: propranolol/);
+
+  // "o que precisa comprar aqui no supermercado?" → lista vem do banco, pelo código
+  state.claudeQueue = [toolUse('consultar_compras', { local: 'supermercado' }), say('OK')];
+  await handleIncoming(webhook({ conversation: 'O QUE PRECISA COMPRAR AQUI NO SUPERMERCADO?' }));
+  assert.match(lastSent(), /🛒 \*Supermercado\* — 3 itens/);
+
+  // "peguei" → baixa de verdade nos 3 do supermercado
+  state.claudeQueue = [toolUse('marcar_comprado', { itens: ['toddy', 'leite', 'coca cola'] }), say('OK')];
+  await handleIncoming(webhook({ conversation: 'PEGUEI' }));
+  const open = tables.shopping_items!.filter((i) => !i.bought_at).map((i) => i.item);
+  assert.deepEqual(open, ['propranolol']);
+  assert.match(lastSent(), /Ainda falta 1 item/);
+
+  // "tirar propanalol da lista" → agora acha e remove
+  state.claudeQueue = [toolUse('remover_da_lista', { itens: ['propranolol'] }), say('OK')];
+  await handleIncoming(webhook({ conversation: 'TIRAR PROPANALOL DA LISTA' }));
+  assert.equal(tables.shopping_items!.filter((i) => !i.bought_at).length, 0);
+  assert.match(lastSent(), /Tirei da lista: propranolol/);
+});
+
+test('se o modelo tentar dizer que anotou pelo "responder", a resposta é barrada', async () => {
+  state.claudeQueue = [respond('✅ Marcado como comprado:\n- toddy\n- leite')];
+  await handleIncoming(webhook({ conversation: 'peguei' }));
+  assert.doesNotMatch(lastSent(), /Marcado como comprado/);
+  assert.match(lastSent(), /Não consegui concluir isso agora/);
+});
+
+test('pergunta legítima pelo "responder" passa, mesmo citando compra', async () => {
+  state.claudeQueue = [respond('Você comprou tudo do supermercado ou só alguns itens?')];
+  await handleIncoming(webhook({ conversation: 'peguei' }));
+  assert.equal(lastSent(), 'Você comprou tudo do supermercado ou só alguns itens?');
 });
