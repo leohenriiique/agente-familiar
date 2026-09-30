@@ -1,4 +1,5 @@
 import { runAgent } from '../agent/agent.js';
+import { openItems } from '../agent/shopping.js';
 import { config, features } from '../config.js';
 import { db, type Member } from '../db/supabase.js';
 import { sendText, sendTyping } from '../whatsapp/evolution.js';
@@ -86,8 +87,10 @@ async function handleAudio(msg: IncomingMessage, member: Member) {
     return reply(msg.remoteJid, `Recebi seu áudio, ${member.name}! Ouvir áudios ainda não está ativo. Por enquanto, me mande por texto.`, member, msg.waMessageId);
   }
   const media = await loadMedia(msg, 'audio/ogg');
+  // Itens da lista ajudam a transcrição a acertar nomes ("dipirona", não "de pirona")
+  const hints = await openItems(member.family_id).then((l) => l.map((i) => i.item)).catch(() => []);
   const [text, path] = await Promise.all([
-    transcribe(media.buffer, media.mimetype),
+    transcribe(media.buffer, media.mimetype, hints),
     storeMedia(member.family_id, 'audio', msg.waMessageId, media),
   ]);
   await updateIncoming(msg.waMessageId, { text: text || undefined, media_path: path });

@@ -105,3 +105,26 @@ export function pendingText(e: ExpenseView): string {
 export function updatedText(e: ExpenseView): string {
   return ['✏️ *Gasto atualizado*', ...expenseLines(e)].join('\n');
 }
+
+/** Remove a linha "🎙️ _"transcrição"_" que o sistema põe antes das respostas a áudio. */
+export function stripHeard(text: string): string {
+  return text.replace(/^\s*🎙️\s*_?"[^\n]*"_?\s*(\n+|$)/gmu, '').trim();
+}
+
+// Palavras de confirmação: se a ferramenta já mandou a confirmação, o modelo não precisa repetir
+const RESTATES = /✅|🗑️|📝|registrad|anotad|marcad|atualizad|apagad|removid|tirei|comprad[oa]s? /i;
+
+/**
+ * Limpa o texto final do modelo antes de ir para a pessoa:
+ * - tira transcrições 🎙️ que o modelo copiou do histórico
+ * - tira "OK"/"Pronto" do começo
+ * - quando uma ferramenta já enviou a confirmação, descarta frases que só a repetem
+ *   (mantém observações úteis, ex.: "A foto estava borrada no total.")
+ */
+export function cleanModelText(text: string, toolAlreadyReplied: boolean): string {
+  let t = stripHeard(text);
+  t = t.replace(/^(ok|okay|pronto|feito)\b[\s.!,:;-]*/i, '').trim();
+  if (!t) return '';
+  if (toolAlreadyReplied && RESTATES.test(t) && !t.includes('?')) return '';
+  return t;
+}

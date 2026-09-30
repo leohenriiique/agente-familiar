@@ -322,3 +322,48 @@ test('lista: "remove o detergente da lista" vai para o agente, não para membros
   assert.equal(tables.shopping_items.length, 0);
   assert.match(lastSent(), /Tirei da lista: detergente/);
 });
+
+// ---------------------------------------------------------------- correções do teste real (print de 30/09)
+
+test('print real: "comprei tudo" não repete "OK ✅ Tudo marcado como comprado!"', async () => {
+  tables.shopping_items = ['macarrão', 'detergente'].map((item, i) => ({
+    id: `p${i}`, family_id: FAMILY, added_by: 'mem-leo', item, quantity: null, store_type: 'supermercado', section: null, bought_at: null, created_at: String(i),
+  }));
+  state.claudeQueue = [toolUse('marcar_comprado', { tudo: true, confirmado_pelo_usuario: true }), say('OK ✅ Tudo marcado como comprado!')];
+  await handleIncoming(webhook({ conversation: 'sim, comprei tudo' }));
+  assert.match(lastSent(), /🎉 Lista completa!/);
+  assert.doesNotMatch(lastSent(), /OK/);
+  assert.equal((lastSent().match(/✅/g) ?? []).length, 1);
+});
+
+test('print real: áudio "tira a dipirona" já comprada — sem transcrição duplicada e com explicação', async () => {
+  tables.shopping_items = [
+    { id: 'b1', family_id: FAMILY, added_by: 'mem-leo', item: 'dipirona', quantity: null, store_type: 'farmácia', section: null, bought_at: new Date().toISOString(), created_at: '1' },
+    { id: 'o1', family_id: FAMILY, added_by: 'mem-leo', item: 'shampoo', quantity: null, store_type: 'farmácia', section: 'higiene', bought_at: null, created_at: '2' },
+  ];
+  // resposta anterior do agente a um áudio, gravada no histórico com a linha 🎙️
+  tables.messages = [{ id: 'h1', member_id: 'mem-leo', direction: 'out', text: '🎙️ _"peguei o remédio"_\n\n✅ Comprado: dipirona', wa_message_id: 'OLD', created_at: '2026-09-30T05:00:00Z' }];
+
+  state.transcription = 'Tiro de pirona da lista.';
+  state.claudeQueue = [
+    (body) => {
+      // o histórico mandado ao modelo NÃO tem a linha 🎙️ (para ele não imitar)
+      const ctx = JSON.stringify(body.messages[0].content);
+      assert.doesNotMatch(ctx, /peguei o remédio/);
+      assert.match(ctx, /Assistente: ✅ Comprado: dipirona/);
+      return toolUse('remover_da_lista', { itens: ['dipirona'] })();
+    },
+    // mesmo que o modelo copie a transcrição, ela não sai duplicada
+    say('🎙️ _"Tiro de pirona da lista."_\n\nOK'),
+  ];
+  await handleIncoming(webhook({ audioMessage: { mimetype: 'audio/ogg' }, base64: 'AAAA' }));
+
+  const reply = lastSent();
+  assert.equal((reply.match(/🎙️/g) ?? []).length, 1);
+  assert.match(reply, /dipirona já foi comprado\(a\) e não está mais na lista/);
+  assert.doesNotMatch(reply, /Não achei/);
+  assert.equal(tables.shopping_items.length, 2); // nada apagado
+
+  // os itens em aberto foram como dica para a transcrição
+  assert.match(state.lastTranscribePrompt, /Lista de compras: shampoo/);
+});

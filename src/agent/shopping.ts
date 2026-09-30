@@ -114,6 +114,36 @@ export async function openItems(familyId: string, store?: StoreType): Promise<Li
   return ((data ?? []) as Row[]).map((r) => toListItem(r, names));
 }
 
+/** Itens comprados nos últimos 14 dias (para explicar "isso já foi comprado"). */
+async function recentlyBought(familyId: string): Promise<ListItem[]> {
+  const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
+  const { data, error } = await db
+    .from('shopping_items')
+    .select(COLS)
+    .eq('family_id', familyId)
+    .gte('bought_at', since)
+    .order('bought_at', { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as Row[]).map((r) => toListItem(r, new Map()));
+}
+
+/** Separa os "não achei" entre já comprados recentemente e realmente desconhecidos. */
+async function explainNotFound(familyId: string, names: string[]): Promise<string[]> {
+  if (!names.length) return [];
+  const bought = await recentlyBought(familyId);
+  const already: string[] = [];
+  const unknown: string[] = [];
+  for (const n of names) {
+    const m = findItemMatch(bought, n);
+    if (m) already.push(m.item);
+    else unknown.push(n);
+  }
+  const lines: string[] = [];
+  if (already.length) lines.push(`ℹ️ ${already.join(', ')} já ${already.length > 1 ? 'foram comprados' : 'foi comprado(a)'} e não ${already.length > 1 ? 'estão' : 'está'} mais na lista.`);
+  if (unknown.length) lines.push(`❓ Não achei na lista: ${unknown.join(', ')}`);
+  return lines;
+}
+
 const SECTION_SET = new Set<string>(SECTIONS);
 const cleanSection = (s: unknown) => (typeof s === 'string' && SECTION_SET.has(normTextKeep(s)) ? normTextKeep(s) : null);
 function normTextKeep(s: string) {
@@ -208,7 +238,7 @@ export async function executeShoppingTool(name: string, input: Record<string, un
       const remaining = open.length - targets.length;
       const parts = [];
       if (targets.length) parts.push(`✅ Comprado: ${targets.map((t) => t.item).join(', ')}`);
-      if (notFound.length) parts.push(`❓ Não achei na lista: ${notFound.join(', ')}`);
+      parts.push(...(await explainNotFound(familyId, notFound)));
       parts.push(remaining ? `Ainda falta${remaining > 1 ? 'm' : ''} ${remaining} ${remaining > 1 ? 'itens' : 'item'}${store ? ` de ${store}` : ''}.` : `🎉 Lista${store ? ` de ${store}` : ''} completa!`);
       ctx.replies.push(parts.join('\n'));
       return { ok: true, resultado: `${targets.length} marcado(s) como comprado(s). A confirmação já foi enviada.` };
@@ -230,7 +260,7 @@ export async function executeShoppingTool(name: string, input: Record<string, un
       }
       const parts = [];
       if (targets.length) parts.push(`🗑️ Tirei da lista: ${targets.map((t) => t.item).join(', ')}`);
-      if (notFound.length) parts.push(`❓ Não achei na lista: ${notFound.join(', ')}`);
+      parts.push(...(await explainNotFound(familyId, notFound)));
       ctx.replies.push(parts.join('\n') || 'Nada para tirar.');
       return { ok: targets.length > 0, resultado: `${targets.length} removido(s). A confirmação já foi enviada.` };
     }

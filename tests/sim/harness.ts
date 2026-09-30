@@ -71,7 +71,7 @@ export const fakeDb = {
 
 // ---------------------------------------------------------------- fetch falso
 export type ClaudeScript = (body: any) => any;
-export const state = { claudeQueue: [] as ClaudeScript[], transcription: '' };
+export const state = { claudeQueue: [] as ClaudeScript[], transcription: '', lastTranscribePrompt: '' };
 export const claudeRequests: any[] = [];
 export const sent: { number: string; text: string }[] = [];
 
@@ -96,6 +96,7 @@ before(() => {
     }
     if (u.includes('api.openai.com')) {
       assert.ok(init.body instanceof FormData);
+      state.lastTranscribePrompt = String((init.body as FormData).get('prompt') ?? '');
       return json({ text: state.transcription });
     }
     if (u.includes('/message/sendText/')) {

@@ -5,13 +5,15 @@ import { extFromMime } from './mime.js';
  * Transcreve um áudio do WhatsApp (ogg/opus) com a API de transcrição da OpenAI.
  * Retorna o texto já sem espaços nas pontas; string vazia se não houver fala.
  */
-export async function transcribe(buffer: Buffer, mimetype: string): Promise<string> {
+export async function transcribe(buffer: Buffer, mimetype: string, hints: string[] = []): Promise<string> {
   const form = new FormData();
   form.append('file', new Blob([new Uint8Array(buffer)], { type: mimetype }), `audio.${extFromMime(mimetype)}`);
   form.append('model', config.OPENAI_TRANSCRIBE_MODEL);
   form.append('language', 'pt');
-  // Ajuda a acertar valores e termos comuns de gastos
-  form.append('prompt', 'Gastos da família: reais, R$, mercado, farmácia, gasolina, Pix, cartão, débito, crédito.');
+  // Vocabulário esperado: termos de gastos + itens da lista de compras da família.
+  // (O whisper-1 aceita até ~224 tokens de prompt; por isso o corte.)
+  const vocab = hints.length ? ` Lista de compras: ${hints.slice(0, 30).join(', ')}.` : '';
+  form.append('prompt', `Gastos e compras da família: reais, R$, mercado, farmácia, gasolina, Pix, cartão, débito, crédito.${vocab}`.slice(0, 600));
 
   let lastError: unknown;
   for (let i = 0; i < 3; i++) {

@@ -74,3 +74,21 @@ test('frases de gasto não viram comando de membro', () => {
   assert.equal(parseCommand('adiciona Ana').kind, 'invalid');
   assert.equal(parseCommand('remove Ana').kind, 'remove_member');
 });
+
+test('limpa o texto final do modelo', async () => {
+  const { cleanModelText, stripHeard } = await import('../src/agent/format.js');
+  // eco da transcrição (o bug do print)
+  assert.equal(stripHeard('🎙️ _"Tiro de pirona da lista."_\n\nOi'), 'Oi');
+  assert.equal(stripHeard('🎙️ "Tiro de pirona da lista."\n\n🎙️ "de novo"\n\nPergunta?'), 'Pergunta?');
+  // "OK" + repetição da confirmação que a ferramenta já mandou
+  assert.equal(cleanModelText('OK ✅ Tudo marcado como comprado!', true), '');
+  assert.equal(cleanModelText('OK', true), '');
+  assert.equal(cleanModelText('Pronto! Anotado.', true), '');
+  // observação útil fica
+  assert.equal(cleanModelText('A foto estava um pouco borrada no total.', true), 'A foto estava um pouco borrada no total.');
+  // pergunta fica, mesmo com palavra de confirmação
+  assert.equal(cleanModelText('Registrado! Quer que eu anote também o troco?', true), 'Registrado! Quer que eu anote também o troco?');
+  // sem ferramenta, o texto do modelo é a resposta
+  assert.equal(cleanModelText('Quanto foi a gasolina?', false), 'Quanto foi a gasolina?');
+  assert.equal(cleanModelText('🎙️ _"x"_\n\nQuanto foi?', false), 'Quanto foi?');
+});
