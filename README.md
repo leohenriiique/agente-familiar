@@ -58,6 +58,24 @@ Mande `oi` do seu WhatsApp para o número do agente. Depois `adiciona <alguém> 
 - [ ] `adiciona` / `remove` só funcionam para admin
 - [ ] Tabela `messages` com entrada e saída de cada conversa
 
+## Deploy no Easypanel (mesma VPS da Evolution)
+
+1. Suba este código para um repositório **privado** no GitHub (o `.env` fica de fora pelo `.gitignore`).
+2. No Easypanel: **Configurações → GitHub**, cole um token do GitHub com acesso de leitura ao repositório.
+3. No projeto `agente`: **+ Serviço → App**, nome **`backend`**.
+4. Aba **Fonte**: GitHub → seu usuário, repositório e branch `main`.
+5. Aba **Build**: **Dockerfile** (caminho `Dockerfile`).
+6. Aba **Ambiente**: cole o conteúdo do `.env`, com `PUBLIC_URL=http://agente_backend:3000` e `EVOLUTION_URL=http://agente_evolution-api:8080`.
+7. **Implantar**. Não precisa de domínio: a Evolution chama o backend pela rede interna.
+8. Com o serviço verde, abra o **Console** do serviço `backend` e rode:
+   ```bash
+   node dist/scripts/setup-family.js "Família Silva" "Leo" "34 99999-9999"
+   node dist/scripts/set-webhook.js
+   ```
+9. Mande `oi` para o número do agente.
+
+Cada `git push` na `main` pode reimplantar sozinho: ative **Auto Deploy** na aba Fonte.
+
 ## Estrutura
 
 ```

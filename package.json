@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "setup:familia": "tsx scripts/setup-family.ts",
-    "setup:webhook": "tsx scripts/set-webhook.ts"
+    "setup:webhook": "tsx scripts/set-webhook.ts",
+    "familia": "node dist/scripts/setup-family.js",
+    "webhook": "node dist/scripts/set-webhook.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
