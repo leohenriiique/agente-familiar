@@ -10,7 +10,8 @@ const uuid = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
 
 class Query {
   private filters: ((r: Row) => boolean)[] = [];
-  private op: 'select' | 'insert' | 'update' | 'delete' = 'select';
+  private op: 'select' | 'insert' | 'upsert' | 'update' | 'delete' = 'select';
+  private conflict: string[] = [];
   private payload: any;
   private mode: 'many' | 'single' | 'maybe' = 'many';
   private orderBy?: { col: string; asc: boolean };
@@ -19,6 +20,11 @@ class Query {
   constructor(private table: string) {}
   select(_cols?: string, opts?: { head?: boolean }) { if (opts?.head) this.head = true; return this; }
   insert(p: any) { this.op = 'insert'; this.payload = p; return this; }
+  upsert(p: any, opts?: { onConflict?: string; ignoreDuplicates?: boolean }) {
+    this.op = 'upsert'; this.payload = p; this.conflict = (opts?.onConflict ?? 'id').split(',').map((c) => c.trim()); return this;
+  }
+  lt(c: string, v: any) { this.filters.push((r) => r[c] < v); return this; }
+  lte(c: string, v: any) { this.filters.push((r) => r[c] <= v); return this; }
   update(p: any) { this.op = 'update'; this.payload = p; return this; }
   delete() { this.op = 'delete'; return this; }
   eq(c: string, v: any) { this.filters.push((r) => r[c] === v); return this; }
@@ -35,13 +41,17 @@ class Query {
   private exec() {
     const t = (tables[this.table] ??= []);
     let rows: Row[];
-    if (this.op === 'insert') {
-      const r = { id: uuid(), created_at: new Date(Date.now() + seq).toISOString(), ...this.payload };
-      if (this.table === 'messages' && r.wa_message_id && t.some((x) => x.wa_message_id === r.wa_message_id)) {
-        return { data: null, error: { code: '23505', message: 'duplicate' } };
+    if (this.op === 'insert' || this.op === 'upsert') {
+      rows = [];
+      for (const p of Array.isArray(this.payload) ? this.payload : [this.payload]) {
+        if (this.op === 'upsert' && t.some((x) => this.conflict.every((c) => x[c] === p[c]))) continue; // ignoreDuplicates
+        const r = { id: uuid(), created_at: new Date(Date.now() + seq).toISOString(), ...p };
+        if (this.table === 'messages' && r.wa_message_id && t.some((x) => x.wa_message_id === r.wa_message_id)) {
+          return { data: null, error: { code: '23505', message: 'duplicate' } };
+        }
+        t.push(r);
+        rows.push(r);
       }
-      t.push(r);
-      rows = [r];
     } else {
       rows = t.filter((r) => this.filters.every((f) => f(r)));
       if (this.op === 'update') rows.forEach((r) => Object.assign(r, this.payload));
@@ -71,7 +81,7 @@ export const fakeDb = {
 
 // ---------------------------------------------------------------- fetch falso
 export type ClaudeScript = (body: any) => any;
-export const state = { claudeQueue: [] as ClaudeScript[], transcription: '', lastTranscribePrompt: '' };
+export const state = { claudeQueue: [] as ClaudeScript[], transcription: '', lastTranscribePrompt: '', failSendTo: '' };
 export const claudeRequests: any[] = [];
 export const sent: { number: string; text: string }[] = [];
 
@@ -108,6 +118,7 @@ before(() => {
     }
     if (u.includes('/message/sendText/')) {
       const b = JSON.parse(init.body);
+      if (state.failSendTo && b.number === state.failSendTo) return json({ error: 'number not on WhatsApp' }, 400);
       sent.push({ number: b.number, text: b.text });
       return json({ key: { id: `OUT${++seq}` } }, 201);
     }

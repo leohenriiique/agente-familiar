@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { config } from './config.js';
 import { handleIncoming } from './handlers/incoming.js';
+import { startScheduler, stopScheduler } from './scheduler.js';
 import { parseEvolutionWebhook } from './whatsapp/parse.js';
 
 const app = Fastify({ logger: { level: 'info' }, bodyLimit: 25 * 1024 * 1024 }); // mídia em base64
@@ -47,7 +48,10 @@ app.post('/webhook/evolution', async (req, reply) => {
 
 app
   .listen({ port: config.PORT, host: '0.0.0.0' })
-  .then(() => app.log.info(`Agente familiar ouvindo na porta ${config.PORT}`))
+  .then(() => {
+    app.log.info(`Agente familiar ouvindo na porta ${config.PORT}`);
+    startScheduler((msg) => app.log.info(msg));
+  })
   .catch((err) => {
     app.log.error(err);
     process.exit(1);
@@ -56,6 +60,7 @@ app
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, async () => {
     app.log.info('Encerrando: aguardando mensagens em processamento…');
+    stopScheduler();
     await Promise.allSettled([...chains.values()]);
     await app.close();
     process.exit(0);

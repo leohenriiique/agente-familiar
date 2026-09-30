@@ -1,5 +1,7 @@
 import { db, type Member } from '../db/supabase.js';
 import type { ToolDefinition } from './claude.js';
+import { AGENDA_TOOLS, agendaToolDefinitions, executeAgendaTool } from './agenda.js';
+import { BILL_TOOLS, billToolDefinitions, executeBillTool } from './bills.js';
 import { executeShoppingTool, SHOPPING_TOOLS, shoppingToolDefinitions } from './shopping.js';
 import {
   confirmationText, formatBRL, parseLocalDateTime, pendingText, toCents, updatedText, type ExpenseView,
@@ -45,6 +47,8 @@ export function toolDefinitions(categories: Category[]): ToolDefinition[] {
 
   return [
     ...shoppingToolDefinitions,
+    ...agendaToolDefinitions,
+    ...billToolDefinitions,
     {
       name: 'registrar_gasto',
       description:
@@ -145,6 +149,8 @@ type ToolResult = { ok: boolean; resultado: string };
 
 export async function executeTool(name: string, input: Record<string, unknown>, ctx: AgentContext): Promise<ToolResult> {
   if (SHOPPING_TOOLS.has(name)) return executeShoppingTool(name, input, ctx);
+  if (AGENDA_TOOLS.has(name)) return executeAgendaTool(name, input, ctx);
+  if (BILL_TOOLS.has(name)) return executeBillTool(name, input, ctx);
   switch (name) {
     case 'registrar_gasto': {
       const cents = centsFrom(input.valor);

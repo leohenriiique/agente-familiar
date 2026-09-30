@@ -28,7 +28,7 @@ export function parseCommand(raw: string | undefined): Command {
 
   // Frases sobre dinheiro, gastos ou lista de compras vão para o agente, mesmo começando com "adiciona" ou "remove"
   // ("adiciona gasto de 50", "remove o último gasto", "adiciona 35,90 de farmácia").
-  if (/\b(gasto|gastos|compra|compras|comprar|lista|despesa|conta|reais|real|r\$)\b|\d+,\d{2}\b|\br\$/i.test(t)) return { kind: 'unknown' };
+  if (/\b(gasto|gastos|compra|compras|comprar|lista|despesa|conta|contas|compromisso|agenda|reais|real|r\$)\b|\d+,\d{2}\b|\br\$/i.test(t)) return { kind: 'unknown' };
 
   // "adiciona Ana 34 99999-9999"  |  "adicionar admin João +55 34 98888-7777"
   const add = text.match(/^\s*adiciona(?:r)?\s+(admin\s+)?(.+?)\s+([+()\d][\d\s()+.-]{8,})\s*$/i);
@@ -65,6 +65,15 @@ export const HELP_TEXT = [
   '• _peguei o macarrão_  /  _comprei tudo_',
   '• _tira o detergente da lista_',
   '',
+  '*Agenda:*',
+  '• _dentista da Ana quinta às 14h_',
+  '• _o que temos amanhã?_',
+  '',
+  '*Contas a pagar:*',
+  '• _internet vence todo dia 15, 120 reais_',
+  '• _quais contas vencem esse mês?_',
+  '• _paguei a internet_',
+  '',
   '• *membros* — quem está cadastrado',
   '',
   'Só para admin:',
@@ -72,5 +81,5 @@ export const HELP_TEXT = [
   '• *adiciona admin João 34 98888-7777*',
   '• *remove Ana* (ou o número)',
   '',
-  'Em breve: agenda, contas a pagar e relatórios.',
+  'Em breve: relatórios de gastos com gráfico.',
 ].join('\n');

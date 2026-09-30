@@ -1,4 +1,4 @@
-# Agente Familiar — Fases 1 a 3
+# Agente Familiar — Fases 1 a 4
 
 Backend do assistente da família no WhatsApp. Esta fase entrega a base: Evolution API conectada, webhook, cadastro de família e membros, log de mensagens e resposta **só para números cadastrados**.
 
@@ -52,6 +52,22 @@ Testes: `npm test` (funções puras) e `npm run test:sim` (conversas completas c
 | _tira o detergente da lista_ | Remove sem marcar como comprado |
 
 A lista é da família inteira: o que um anota, todos veem. Requer a migration `0002_shopping_section.sql` (coluna `section`).
+
+## Fase 4 — agenda e contas a pagar
+
+| Mensagem | O que acontece |
+| --- | --- |
+| _dentista da Ana quinta às 14h_ | Agenda com aviso 1 dia e 1 hora antes, para você e a Ana |
+| _me lembra 30 min antes_ | Troca os avisos daquele compromisso |
+| _o que temos amanhã?_ / _agenda da semana_ | Lista por dia, com horário, local e quem vai |
+| _o dentista passou para as 15h_ | Atualiza e refaz os avisos |
+| _cancela o dentista_ | Pergunta antes, depois apaga compromisso e avisos |
+| _internet vence todo dia 15, 120 reais_ | Conta mensal com lembrete 3 dias antes e no dia (9h) |
+| _IPVA todo ano dia 20 de março_ / _boleto dia 05/11_ | Conta anual / única |
+| _quais contas vencem?_ / _tem conta atrasada?_ | Lista com status: ✅ paga, 🟡 vence em até 3 dias, 🔴 vencida |
+| _paguei a internet_ | Marca paga, lança nos gastos (Contas da casa) e cancela os avisos seguintes |
+
+**Agendador:** roda dentro do backend (`src/scheduler.ts`). A cada minuto envia os lembretes vencidos; de hora em hora gera os vencimentos dos próximos 40 dias. Conta não paga recebe aviso de *vencida* no dia seguinte, às 9h. Lembretes de conta vão para os admins e para quem cadastrou; de compromisso, para os participantes. Se o servidor ficar fora do ar, os lembretes atrasados até 6 h saem quando ele voltar; os mais antigos são descartados. Requer a migration `0003_bills_schedule.sql`.
 
 ## Como subir
 
@@ -142,4 +158,4 @@ tests/                   npm test — parser, telefones e comandos
 
 ## Próxima fase
 
-Fase 4 — agenda e contas a pagar: compromissos com alertas, contas recorrentes com lembrete antes do vencimento.
+Fase 5 — relatórios: gastos por categoria e período com gráfico, comparação com o período anterior e resumos automáticos (semanal e mensal).
