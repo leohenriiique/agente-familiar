@@ -112,7 +112,7 @@ export function stripHeard(text: string): string {
 }
 
 // Palavras de confirmação: se a ferramenta já mandou a confirmação, o modelo não precisa repetir
-const RESTATES = /✅|🗑️|📝|registrad|anotad|marcad|atualizad|apagad|removid|tirei|comprad[oa]s? /i;
+const RESTATES = /✅|🗑️|📝|📅|🧾|🔔|registrad|anotad|marcad|atualizad|apagad|removid|tirei|agendad|cadastrad|comprad[oa]s? |\bpag[ao]\b|vencimento/i;
 
 /**
  * Limpa o texto final do modelo antes de ir para a pessoa:
@@ -125,6 +125,13 @@ export function cleanModelText(text: string, toolAlreadyReplied: boolean): strin
   let t = stripHeard(text);
   t = t.replace(/^(ok|okay|pronto|feito)\b[\s.!,:;-]*/i, '').trim();
   if (!t) return '';
-  if (toolAlreadyReplied && RESTATES.test(t) && !t.includes('?')) return '';
-  return t;
+  if (!toolAlreadyReplied) return t;
+  // Pergunta à pessoa sempre passa
+  if (t.includes('?')) return t;
+  // Depois de uma confirmação do sistema, só passa uma observação curta de UMA linha,
+  // sem formatação de cartão e sem repetir a ação ("✅ Compromisso agendado…", "Próximo vencimento…")
+  const oneLine = !t.includes('\n');
+  const noCard = !t.includes('*');
+  if (oneLine && noCard && t.length >= 20 && t.length <= 160 && !RESTATES.test(t)) return t;
+  return '';
 }

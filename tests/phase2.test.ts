@@ -91,4 +91,10 @@ test('limpa o texto final do modelo', async () => {
   // sem ferramenta, o texto do modelo é a resposta
   assert.equal(cleanModelText('Quanto foi a gasolina?', false), 'Quanto foi a gasolina?');
   assert.equal(cleanModelText('🎙️ _"x"_\n\nQuanto foi?', false), 'Quanto foi?');
+  // vídeo de 30/09: cópia do cartão de compromisso e parágrafo extra das contas
+  assert.equal(cleanModelText('📅 *Compromisso agendado*\n*Prova da Samantha*\n🕐 amanhã (quinta) às 19:00\n👥 Samantha', true), '');
+  assert.equal(cleanModelText('Só você tem a Internet cadastrada, que vence *todo dia 2* (R$ 120).\n\nPróximo vencimento: *sex, 02/10* 🧾', true), '');
+  // enfeite curto
+  assert.equal(cleanModelText('Tá lá! 🛒', true), '');
+  assert.equal(cleanModelText('👍 Ainda falta pegar o propranolol na farmácia.', true), '👍 Ainda falta pegar o propranolol na farmácia.');
 });
