@@ -12,7 +12,8 @@
     "setup:familia": "tsx scripts/setup-family.ts",
     "setup:webhook": "tsx scripts/set-webhook.ts",
     "familia": "node dist/scripts/setup-family.js",
-    "webhook": "node dist/scripts/set-webhook.js"
+    "webhook": "node dist/scripts/set-webhook.js",
+    "test:sim": "tsx --experimental-test-module-mocks --test tests/sim/*.sim.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

@@ -26,6 +26,10 @@ export function parseCommand(raw: string | undefined): Command {
   if (/^(oi+|ola|bom dia|boa tarde|boa noite|e ai|opa|hey)[!. ]*$/.test(t)) return { kind: 'greeting' };
   if (/^(membros|quem (esta|ta) cadastrado|lista de membros)\??$/.test(t)) return { kind: 'list_members' };
 
+  // Frases sobre dinheiro/gastos vão para o agente, mesmo começando com "adiciona" ou "remove"
+  // ("adiciona gasto de 50", "remove o último gasto", "adiciona 35,90 de farmácia").
+  if (/\b(gasto|gastos|compra|compras|despesa|conta|reais|real|r\$)\b|\d+,\d{2}\b|\br\$/i.test(t)) return { kind: 'unknown' };
+
   // "adiciona Ana 34 99999-9999"  |  "adicionar admin João +55 34 98888-7777"
   const add = text.match(/^\s*adiciona(?:r)?\s+(admin\s+)?(.+?)\s+([+()\d][\d\s()+.-]{8,})\s*$/i);
   if (add) {
@@ -35,7 +39,8 @@ export function parseCommand(raw: string | undefined): Command {
     if (!name) return { kind: 'invalid', reason: 'Faltou o nome. Ex.: adiciona Ana 34 99999-9999' };
     return { kind: 'add_member', name, phone, admin: Boolean(add[1]) };
   }
-  if (/^adiciona(r)?\b/.test(t)) {
+  // "adiciona Ana" (sem número) → explica o formato; com números, provavelmente é gasto → agente
+  if (/^adiciona(r)?\b/.test(t) && !/\d/.test(t)) {
     return { kind: 'invalid', reason: 'Formato: adiciona <nome> <telefone com DDD>. Ex.: adiciona Ana 34 99999-9999' };
   }
 
@@ -48,8 +53,12 @@ export function parseCommand(raw: string | undefined): Command {
 export const HELP_TEXT = [
   '*Assistente da família* 🏠',
   '',
-  'Por enquanto eu entendo:',
-  '• *oi* — testar se estou funcionando',
+  '*Gastos* — escreva, mande áudio ou foto do cupom:',
+  '• _gastei 50 de gasolina_',
+  '• _almoço 38,90 no crédito ontem_',
+  '• _na verdade foi 45_  /  _muda para Saúde_',
+  '• _apaga o último gasto_',
+  '',
   '• *membros* — quem está cadastrado',
   '',
   'Só para admin:',
@@ -57,5 +66,5 @@ export const HELP_TEXT = [
   '• *adiciona admin João 34 98888-7777*',
   '• *remove Ana* (ou o número)',
   '',
-  'Em breve: gastos, lista de compras, agenda e contas a pagar.',
+  'Em breve: lista de compras, agenda, contas a pagar e relatórios.',
 ].join('\n');

@@ -14,4 +14,5 @@ if (!config.PUBLIC_URL) {
 const url = `${config.PUBLIC_URL.replace(/\/$/, '')}/webhook/evolution?token=${encodeURIComponent(config.WEBHOOK_TOKEN)}`;
 const res = await setWebhook(url);
 console.log('✅ Webhook configurado:', url.replace(config.WEBHOOK_TOKEN, '***'));
-console.log(JSON.stringify(res, null, 2));
+// Não imprime o token: a resposta da Evolution devolve a URL completa
+console.log(JSON.stringify(res, null, 2).replaceAll(config.WEBHOOK_TOKEN, '***'));

@@ -11,6 +11,12 @@ const schema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   FAMILY_GROUP_JID: z.string().optional().default(''),
+
+  // Fase 2 — opcionais: cada parte liga sozinha quando a chave existe
+  ANTHROPIC_API_KEY: z.string().optional().default(''),
+  CLAUDE_MODEL: z.string().optional().default('claude-haiku-4-5-20251001'),
+  OPENAI_API_KEY: z.string().optional().default(''),
+  OPENAI_TRANSCRIBE_MODEL: z.string().optional().default('whisper-1'),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -20,3 +26,8 @@ if (!parsed.success) {
 }
 
 export const config = parsed.data;
+
+export const features = {
+  agent: config.ANTHROPIC_API_KEY.length > 0,
+  transcription: config.OPENAI_API_KEY.length > 0,
+};

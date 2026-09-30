@@ -1,4 +1,4 @@
-# Agente Familiar — Fase 1
+# Agente Familiar — Fases 1 e 2
 
 Backend do assistente da família no WhatsApp. Esta fase entrega a base: Evolution API conectada, webhook, cadastro de família e membros, log de mensagens e resposta **só para números cadastrados**.
 
@@ -16,6 +16,28 @@ Backend do assistente da família no WhatsApp. Esta fase entrega a base: Evoluti
 | qualquer coisa | número desconhecido | Um aviso a cada 24 h, nada mais |
 
 Mensagens repetidas pela Evolution são descartadas pelo `wa_message_id`. Mensagens do mesmo remetente são processadas em ordem.
+
+## Fase 2 — gastos por texto, áudio e foto
+
+| Mensagem | O que acontece |
+| --- | --- |
+| _gastei 50 de gasolina ontem_ | Registra R$ 50,00 em Combustível, data de ontem, e confirma |
+| 🎙️ áudio | Transcreve, mostra o que entendeu e registra |
+| 📸 foto do cupom | Guarda a foto e lê total, loja, data e pagamento; leitura incerta fica *pendente* até um "sim" |
+| _na verdade foi 45_ / _muda para Saúde_ | Corrige o último gasto |
+| _apaga o último gasto_ | Pergunta antes e só apaga depois do "sim" |
+| _50 de gasolina e 30 na padaria_ | Registra dois gastos |
+
+Cada parte liga sozinha quando a chave existe no ambiente:
+
+| Chave | Liga |
+| --- | --- |
+| `OPENAI_API_KEY` | Transcrição de áudios |
+| `ANTHROPIC_API_KEY` | Entender gastos e ler cupons |
+
+Sem a chave do Claude, o agente continua respondendo: transcreve áudios, guarda fotos e avisa que registrar gastos ainda não está ativo. Fotos e áudios ficam no bucket privado `receipts`, em `<família>/<imagem|audio>/<id da mensagem>`.
+
+Testes: `npm test` (funções puras) e `npm run test:sim` (conversas completas com banco e APIs falsos).
 
 ## Como subir
 
@@ -106,4 +128,4 @@ tests/                   npm test — parser, telefones e comandos
 
 ## Próxima fase
 
-Fase 2 — gastos: `registrar_gasto`, `corrigir_gasto`, `excluir_gasto` com Claude (texto e imagem) e Whisper (áudio). Tudo que hoje cai em "ainda não sei fazer isso" passa a ir para o agente.
+Fase 3 — lista de compras: adicionar itens por local (supermercado, farmácia…), "estou no supermercado, precisa algo?" e marcar como comprado.

@@ -49,6 +49,16 @@ export async function sendImage(to: string, base64Png: string, caption?: string)
   });
 }
 
+/** Baixa a mídia de uma mensagem recebida (quando o webhook não trouxe o base64). */
+export async function getMediaBase64(waMessageId: string): Promise<{ base64: string; mimetype?: string }> {
+  const res = await call<{ base64?: string; mimetype?: string }>(
+    `/chat/getBase64FromMediaMessage/${instance}`,
+    { message: { key: { id: waMessageId } }, convertToMp4: false },
+  );
+  if (!res?.base64) throw new Error('Evolution não retornou a mídia');
+  return { base64: res.base64, mimetype: res.mimetype };
+}
+
 /** Mostra "digitando…" por alguns segundos. Falha aqui nunca bloqueia a resposta. */
 export async function sendTyping(to: string, ms = 3000) {
   try {

@@ -1,10 +1,14 @@
-import { config } from '../config.js';
+import { runAgent } from '../agent/agent.js';
+import { config, features } from '../config.js';
 import { db, type Member } from '../db/supabase.js';
 import { sendText, sendTyping } from '../whatsapp/evolution.js';
+import { isClaudeImage } from '../media/mime.js';
+import { loadMedia, storeMedia } from '../media/storage.js';
+import { transcribe } from '../media/transcribe.js';
 import type { IncomingMessage } from '../whatsapp/parse.js';
 import { normalizeBrPhone, phoneVariants } from '../whatsapp/phone.js';
 import { HELP_TEXT, parseCommand } from './commands.js';
-import { logIncoming, logOutgoing } from './log.js';
+import { logIncoming, logOutgoing, updateIncoming } from './log.js';
 import { addMember, deactivateMember, findActiveMemberByPhone, listMembers } from './members.js';
 
 const GROUP_TRIGGER = /^\s*(assistente|@assistente)[,:!]?\s*/i;
@@ -56,21 +60,73 @@ export async function handleIncoming(msg: IncomingMessage): Promise<void> {
     return;
   }
 
-  await sendTyping(msg.remoteJid, 1500);
+  await sendTyping(msg.remoteJid, 3000);
 
-  if (msg.type !== 'text') {
-    const what = { audio: 'áudio', image: 'foto', document: 'documento', other: 'esse tipo de mensagem' }[msg.type];
-    await reply(
+  try {
+    if (msg.type === 'text') return await handleText(msg, member, msg.text ?? '', 'texto');
+    if (msg.type === 'audio') return await handleAudio(msg, member);
+    if (msg.type === 'image') return await handleImage(msg, member);
+    return await reply(
       msg.remoteJid,
-      `Recebi seu ${what}, ${member.name}! 👍 Ler ${what === 'foto' ? 'fotos de cupons' : what + 's'} chega na próxima fase. Por enquanto, me mande por texto.`,
+      `Recebi, ${member.name}! Por enquanto entendo texto, áudio e foto. Documentos (PDF) chegam em breve.`,
       member,
       msg.waMessageId,
     );
-    return;
+  } catch (err) {
+    console.error('Erro ao processar mensagem', err);
+    await reply(msg.remoteJid, 'Tive um problema para processar isso agora. 😕 Pode tentar de novo em instantes?', member);
   }
+}
 
-  const cmd = parseCommand(msg.text);
+const AGENT_OFF =
+  'Anotar gastos ainda não está ativo: falta ligar a inteligência do assistente (chave do Claude). Assim que estiver, é só mandar de novo. 🙂';
+
+async function handleAudio(msg: IncomingMessage, member: Member) {
+  if (!features.transcription) {
+    return reply(msg.remoteJid, `Recebi seu áudio, ${member.name}! Ouvir áudios ainda não está ativo. Por enquanto, me mande por texto.`, member, msg.waMessageId);
+  }
+  const media = await loadMedia(msg, 'audio/ogg');
+  const [text, path] = await Promise.all([
+    transcribe(media.buffer, media.mimetype),
+    storeMedia(member.family_id, 'audio', msg.waMessageId, media),
+  ]);
+  await updateIncoming(msg.waMessageId, { text: text || undefined, media_path: path });
+  if (!text) {
+    return reply(msg.remoteJid, 'Não consegui entender o áudio. 🎙️ Pode repetir ou mandar por texto?', member, msg.waMessageId);
+  }
+  return handleText(msg, member, text, 'audio');
+}
+
+async function handleImage(msg: IncomingMessage, member: Member) {
+  const media = await loadMedia(msg, 'image/jpeg');
+  const path = await storeMedia(member.family_id, 'imagem', msg.waMessageId, media);
+  await updateIncoming(msg.waMessageId, { media_path: path });
+
+  if (!features.agent) {
+    return reply(msg.remoteJid, `📸 Foto guardada! ${AGENT_OFF}`, member, msg.waMessageId);
+  }
+  if (!isClaudeImage(media.mimetype)) {
+    return reply(msg.remoteJid, 'Não consigo ler esse formato de imagem. Pode mandar como foto normal (JPG)?', member, msg.waMessageId);
+  }
+  if (media.buffer.length > 5 * 1024 * 1024) {
+    return reply(msg.remoteJid, 'A foto ficou grande demais para eu ler. Pode mandar de novo com qualidade normal?', member, msg.waMessageId);
+  }
+  const answer = await runAgent(member, {
+    text: msg.text,
+    image: { base64: media.base64, mimetype: media.mimetype },
+    source: 'imagem',
+    receiptPath: path,
+    messageTime: msg.timestamp,
+    currentWaId: msg.waMessageId,
+  });
+  return reply(msg.remoteJid, answer, member, msg.waMessageId);
+}
+
+/** Texto (digitado ou transcrito): comandos fixos primeiro, depois o agente. */
+async function handleText(msg: IncomingMessage, member: Member, text: string, source: 'texto' | 'audio') {
+  const cmd = parseCommand(text);
   const isAdmin = member.role === 'admin';
+  const heard = source === 'audio' ? `🎙️ _"${text}"_\n\n` : '';
 
   switch (cmd.kind) {
     case 'greeting':
@@ -132,11 +188,16 @@ export async function handleIncoming(msg: IncomingMessage): Promise<void> {
     case 'invalid':
       return reply(msg.remoteJid, cmd.reason, member);
 
-    case 'unknown':
-      return reply(
-        msg.remoteJid,
-        `Ainda não sei fazer isso, ${member.name}. 🙂 Gastos, compras, agenda e contas chegam nas próximas fases. Mande *ajuda* para ver o que já funciona.`,
-        member,
-      );
+    case 'unknown': {
+      if (!features.agent) return reply(msg.remoteJid, `${heard}${AGENT_OFF}`, member);
+      const answer = await runAgent(member, {
+        text,
+        source,
+        receiptPath: null,
+        messageTime: msg.timestamp,
+        currentWaId: msg.waMessageId,
+      });
+      return reply(msg.remoteJid, `${heard}${answer}`, member);
+    }
   }
 }

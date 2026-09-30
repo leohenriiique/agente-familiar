@@ -25,6 +25,12 @@ export async function logIncoming(
   return true;
 }
 
+/** Completa a mensagem recebida com a transcrição do áudio e/ou o arquivo guardado. */
+export async function updateIncoming(waMessageId: string, patch: { text?: string; media_path?: string | null }) {
+  const { error } = await db.from('messages').update(patch).eq('wa_message_id', waMessageId);
+  if (error) console.error('Falha ao atualizar mensagem recebida', error);
+}
+
 export async function logOutgoing(
   to: string,
   text: string,
