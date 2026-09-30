@@ -23,6 +23,7 @@ class Query {
   delete() { this.op = 'delete'; return this; }
   eq(c: string, v: any) { this.filters.push((r) => r[c] === v); return this; }
   in(c: string, vs: any[]) { this.filters.push((r) => vs.includes(r[c])); return this; }
+  is(c: string, v: any) { this.filters.push((r) => (r[c] ?? null) === v); return this; }
   not(c: string, _op: string, _v: any) { this.filters.push((r) => r[c] !== null && r[c] !== undefined); return this; }
   gte(c: string, v: any) { this.filters.push((r) => r[c] >= v); return this; }
   order(col: string, o?: { ascending?: boolean }) { this.orderBy = { col, asc: o?.ascending ?? true }; return this; }

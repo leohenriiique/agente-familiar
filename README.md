@@ -1,4 +1,4 @@
-# Agente Familiar — Fases 1 e 2
+# Agente Familiar — Fases 1 a 3
 
 Backend do assistente da família no WhatsApp. Esta fase entrega a base: Evolution API conectada, webhook, cadastro de família e membros, log de mensagens e resposta **só para números cadastrados**.
 
@@ -38,6 +38,20 @@ Cada parte liga sozinha quando a chave existe no ambiente:
 Sem a chave do Claude, o agente continua respondendo: transcreve áudios, guarda fotos e avisa que registrar gastos ainda não está ativo. Fotos e áudios ficam no bucket privado `receipts`, em `<família>/<imagem|audio>/<id da mensagem>`.
 
 Testes: `npm test` (funções puras) e `npm run test:sim` (conversas completas com banco e APIs falsos).
+
+## Fase 3 — lista de compras
+
+| Mensagem | O que acontece |
+| --- | --- |
+| _precisa comprar macarrão, detergente e dipirona_ | Anota cada item no local certo (supermercado, farmácia…) e na seção (mercearia, limpeza…) |
+| _anota 2 pacotes de macarrão_ | Item que já está na lista não duplica: atualiza a quantidade |
+| _estou no supermercado, precisa algo?_ | Mostra só o supermercado, agrupado por seção, com quem anotou |
+| _o que tem na lista?_ | Mostra todos os locais |
+| _peguei o macarrão_ | Dá baixa e diz quantos itens faltam |
+| _comprei tudo_ | Pergunta antes e só dá baixa depois do "sim" |
+| _tira o detergente da lista_ | Remove sem marcar como comprado |
+
+A lista é da família inteira: o que um anota, todos veem. Requer a migration `0002_shopping_section.sql` (coluna `section`).
 
 ## Como subir
 
@@ -128,4 +142,4 @@ tests/                   npm test — parser, telefones e comandos
 
 ## Próxima fase
 
-Fase 3 — lista de compras: adicionar itens por local (supermercado, farmácia…), "estou no supermercado, precisa algo?" e marcar como comprado.
+Fase 4 — agenda e contas a pagar: compromissos com alertas, contas recorrentes com lembrete antes do vencimento.

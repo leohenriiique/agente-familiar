@@ -1,5 +1,6 @@
 import { db, type Member } from '../db/supabase.js';
 import type { ToolDefinition } from './claude.js';
+import { executeShoppingTool, SHOPPING_TOOLS, shoppingToolDefinitions } from './shopping.js';
 import {
   confirmationText, formatBRL, parseLocalDateTime, pendingText, toCents, updatedText, type ExpenseView,
 } from './format.js';
@@ -43,6 +44,7 @@ export function toolDefinitions(categories: Category[]): ToolDefinition[] {
   };
 
   return [
+    ...shoppingToolDefinitions,
     {
       name: 'registrar_gasto',
       description:
@@ -142,6 +144,7 @@ async function findExpense(ctx: AgentContext, id: unknown, onlyPending = false):
 type ToolResult = { ok: boolean; resultado: string };
 
 export async function executeTool(name: string, input: Record<string, unknown>, ctx: AgentContext): Promise<ToolResult> {
+  if (SHOPPING_TOOLS.has(name)) return executeShoppingTool(name, input, ctx);
   switch (name) {
     case 'registrar_gasto': {
       const cents = centsFrom(input.valor);

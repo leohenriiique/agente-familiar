@@ -79,7 +79,7 @@ test('texto: registra gasto com data relativa e confirma com categoria, data e v
 
   // o Claude recebeu as categorias da família e a data de hoje
   const req = claudeRequests[0];
-  assert.deepEqual([...req.tools[0].input_schema.properties.categoria.enum].sort(), CATS.map((c) => c.name).sort());
+  assert.deepEqual([...req.tools.find((t: any) => t.name === 'registrar_gasto').input_schema.properties.categoria.enum].sort(), CATS.map((c) => c.name).sort());
   assert.match(req.system, /Está falando com Leo/);
 });
 
@@ -232,4 +232,93 @@ test('erro na API do Claude: pede desculpa e não trava', async () => {
   state.claudeQueue = [() => { throw new Error('boom'); }];
   await handleIncoming(webhook({ conversation: 'gastei 10 no café' }));
   assert.match(lastSent(), /Tive um problema/);
+});
+
+// ---------------------------------------------------------------- fase 3: lista de compras
+
+test('lista: anota itens por local e seção, sem duplicar', async () => {
+  state.claudeQueue = [
+    toolUse('adicionar_compras', { itens: [
+      { item: 'macarrão', local: 'supermercado', secao: 'mercearia' },
+      { item: 'detergente', local: 'supermercado', secao: 'limpeza' },
+      { item: 'dipirona', local: 'farmácia' },
+    ] }),
+    say('OK'),
+  ];
+  await handleIncoming(webhook({ conversation: 'precisa comprar macarrão, detergente e dipirona' }));
+  const items = tables.shopping_items!;
+  assert.equal(items.length, 3);
+  assert.equal(items.find((i) => i.item === 'dipirona')!.store_type, 'farmácia');
+  assert.equal(items.find((i) => i.item === 'macarrão')!.section, 'mercearia');
+  assert.equal(items[0]!.added_by, 'mem-leo');
+  assert.match(lastSent(), /Anotado na lista/);
+  assert.match(lastSent(), /🛒 Supermercado: macarrão, detergente/);
+  assert.match(lastSent(), /💊 Farmácia: dipirona/);
+
+  // de novo o macarrão, agora com quantidade: atualiza, não duplica
+  state.claudeQueue = [toolUse('adicionar_compras', { itens: [{ item: 'macarrão', quantidade: '2 pacotes', local: 'supermercado', secao: 'mercearia' }] }), say('OK')];
+  await handleIncoming(webhook({ conversation: 'anota 2 pacotes de macarrão' }));
+  assert.equal(tables.shopping_items!.length, 3);
+  assert.equal(tables.shopping_items!.find((i) => i.item === 'macarrão')!.quantity, '2 pacotes');
+  assert.match(lastSent(), /já estava na lista/);
+
+  // a lista em aberto foi para o contexto do Claude
+  assert.match(JSON.stringify(claudeRequests.at(-2).messages[0].content), /Lista de compras em aberto \(3 itens\)/);
+});
+
+test('lista: "estou no supermercado" mostra só o supermercado, por seção, com quem anotou', async () => {
+  tables.members!.push({ id: 'mem-ana', family_id: FAMILY, name: 'Ana', phone: '5534988887777', role: 'membro', active: true });
+  tables.shopping_items = [
+    { id: 's1', family_id: FAMILY, added_by: 'mem-leo', item: 'macarrão', quantity: null, store_type: 'supermercado', section: 'mercearia', bought_at: null, created_at: '1' },
+    { id: 's2', family_id: FAMILY, added_by: 'mem-ana', item: 'detergente', quantity: null, store_type: 'supermercado', section: 'limpeza', bought_at: null, created_at: '2' },
+    { id: 's3', family_id: FAMILY, added_by: 'mem-ana', item: 'dipirona', quantity: null, store_type: 'farmácia', section: null, bought_at: null, created_at: '3' },
+    { id: 's4', family_id: FAMILY, added_by: 'mem-leo', item: 'arroz', quantity: null, store_type: 'supermercado', section: 'mercearia', bought_at: '2026-09-01', created_at: '0' },
+    { id: 's5', family_id: 'outra', added_by: 'x', item: 'segredo', quantity: null, store_type: 'supermercado', section: null, bought_at: null, created_at: '4' },
+  ];
+  state.claudeQueue = [toolUse('consultar_compras', { local: 'supermercado' }), say('OK')];
+  await handleIncoming(webhook({ conversation: 'estou no supermercado, precisa comprar algo?' }));
+  const reply = lastSent();
+  assert.match(reply, /🛒 \*Supermercado\* — 2 itens/);
+  assert.match(reply, /\*Mercearia:\* macarrão/);
+  assert.match(reply, /\*Limpeza:\* detergente/);
+  assert.match(reply, /Anotado por: Leo, Ana/);
+  assert.doesNotMatch(reply, /dipirona/); // outro local
+  assert.doesNotMatch(reply, /arroz/);    // já comprado
+  assert.doesNotMatch(reply, /segredo/);  // outra família
+});
+
+test('lista: dar baixa em itens e "comprei tudo" só com confirmação', async () => {
+  tables.shopping_items = ['macarrão', 'detergente', 'tomate'].map((item, i) => ({
+    id: `s${i}`, family_id: FAMILY, added_by: 'mem-leo', item, quantity: null, store_type: 'supermercado', section: null, bought_at: null, created_at: String(i),
+  }));
+  state.claudeQueue = [toolUse('marcar_comprado', { itens: ['macarrao', 'feijão'] }), say('OK')];
+  await handleIncoming(webhook({ conversation: 'peguei o macarrao e o feijão' }));
+  assert.ok(tables.shopping_items.find((i) => i.item === 'macarrão')!.bought_at);
+  assert.equal(tables.shopping_items.find((i) => i.item === 'macarrão')!.bought_by, 'mem-leo');
+  assert.match(lastSent(), /✅ Comprado: macarrão/);
+  assert.match(lastSent(), /Não achei na lista: feijão/);
+  assert.match(lastSent(), /Ainda faltam 2 itens/);
+
+  state.claudeQueue = [
+    toolUse('marcar_comprado', { tudo: true, local: 'supermercado' }),
+    (body) => {
+      assert.match(body.messages.at(-1).content[0].content, /Dou baixa em todos os 2 itens de supermercado/);
+      return say('Dou baixa nos 2 itens que faltam (detergente e tomate)?')();
+    },
+  ];
+  await handleIncoming(webhook({ conversation: 'comprei tudo' }));
+  assert.equal(tables.shopping_items.filter((i) => !i.bought_at).length, 2);
+
+  state.claudeQueue = [toolUse('marcar_comprado', { tudo: true, local: 'supermercado', confirmado_pelo_usuario: true }), say('OK')];
+  await handleIncoming(webhook({ conversation: 'sim' }));
+  assert.equal(tables.shopping_items.filter((i) => !i.bought_at).length, 0);
+  assert.match(lastSent(), /Lista de supermercado completa/);
+});
+
+test('lista: "remove o detergente da lista" vai para o agente, não para membros', async () => {
+  tables.shopping_items = [{ id: 'd1', family_id: FAMILY, added_by: 'mem-leo', item: 'detergente', quantity: null, store_type: 'supermercado', section: 'limpeza', bought_at: null, created_at: '1' }];
+  state.claudeQueue = [toolUse('remover_da_lista', { itens: ['detergente'] }), say('OK')];
+  await handleIncoming(webhook({ conversation: 'remove o detergente da lista' }));
+  assert.equal(tables.shopping_items.length, 0);
+  assert.match(lastSent(), /Tirei da lista: detergente/);
 });
